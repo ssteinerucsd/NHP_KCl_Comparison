@@ -1,0 +1,517 @@
+NHP Analysis for Nucleotide Data
+```{r}
+library(readr)
+library(reshape2)
+library(ggplot2)
+```
+
+```{r}
+#Load in the data and make the data frame columns correct
+nhp_activity_data <- read.csv("~/Desktop/NHP_nucleotide_activity/nhp_activity_data.csv", stringsAsFactors = FALSE)
+colnames(nhp_activity_data)[1] <- "Nucleotide"
+nhp_activity_data <- t(nhp_activity_data)
+colnames(nhp_activity_data) <- nhp_activity_data[1,]
+nhp_activity_data <- as.data.frame(nhp_activity_data)
+nhp_activity_data <- nhp_activity_data[-c(1),]
+nhp_activity_data[] <- lapply(nhp_activity_data, as.numeric)
+nhp_activity_data["identifier"] <- rownames(nhp_activity_data)
+melted_nhp_activity_data <- melt(nhp_activity_data, id = "identifier")
+colnames(melted_nhp_activity_data) <- c("identifier", "Nucleotide", "counts")
+melted_nhp_activity_data["counts"] <- as.numeric(unlist(melted_nhp_activity_data["counts"])) 
+```
+
+```{r}
+#merge information abotu samples with the samples themselves
+meta <- read_csv("~/Desktop/NHP_nucleotide_activity/NHPmeta2.csv")
+melted_nhp_activity_data <- merge(meta, melted_nhp_activity_data, by = "identifier")
+nhp_activity_w_averages <- nhp_activity_data
+nhp_activity_data <- merge(meta, nhp_activity_data)
+
+#plot the mass spec values across all the different molecules
+ggplot(melted_nhp_activity_data) +
+        geom_point(aes(x = Nucleotide, y = counts, color = sample_type)) +
+        xlab("Mass Spec Value") +
+        ylab("Normalized (by Total Protein) Mass Spec Values") +
+        ggtitle("Protein Counts By Cell Line") +
+        theme_bw() +
+	theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+	theme(plot.title=element_text(hjust=0.5)) 
+
+```
+
+
+```{r}
+# plot the cell line changes in mass spec value
+for (i in c(5:26)){  
+  nucleotide <- colnames(nhp_activity_data)[i]
+  title <- paste0("Mass Spec Values Per Cell Line: ", nucleotide)
+  cnts <- nhp_activity_data[,c(1:4, i)]
+  print(ggplot(cnts,aes(x=cell_line,y=nhp_activity_data[,i],col=sample_type)) + geom_point(position=position_jitterdodge(jitter.width = 0, jitter.height = 0)) + ggtitle(title) + ylab("Mass Spec Values (Normalized to Total Protein)") +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme(plot.title=element_text(hjust=0.5))+
+    stat_summary(mapping = aes(fill=sample_type), fun = mean, position=position_dodge(0.75),
+                 geom = "point", size=2, color = "black", show.legend=FALSE ))
+}
+```
+
+```{r}
+# plot the mass spec values for each molecule across species
+for (i in c(5:26)){  
+  nucleotide <- colnames(nhp_activity_data)[i]
+  title <- paste0("Mass Spec Values Per Species: ", nucleotide)
+  cnts <- nhp_activity_data[,c(1:4, i)]
+  print(ggplot(cnts,aes(x=species,y=nhp_activity_data[,i],col=sample_type)) + geom_point(position=position_jitterdodge(jitter.width = 0, jitter.height = 0)) + ggtitle(title) + ylab("Mass Spec Values (Normalized to Total Protein)") +
+     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme(plot.title=element_text(hjust=0.5))+
+    stat_summary(mapping = aes(fill=sample_type), fun = mean, position=position_dodge(0.75),
+                 geom = "point", size=2, color = "black", show.legend=FALSE))
+}
+
+```
+
+```{r}
+#plot the mass spec values per species with error bars and means for each condition
+nhp_activity_data$species <- factor(nhp_activity_data$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+for (i in c(5:26)){  
+  nucleotide <- colnames(nhp_activity_data)[i]
+  title <- paste0("Mass Spec Values Per Species: ", nucleotide)
+  cnts <- nhp_activity_data[,c(1:4, i)]
+  print(ggplot(cnts, aes(x = species, y = nhp_activity_data[,i], group = sample_type, color = sample_type)) + 
+      geom_point() + stat_summary(fun=mean, geom="line") + ylab("Mass Spec Values (Normalized to Total Protein)") + stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.3, alpha = 0.4) +
+      ggtitle(title))
+}
+```
+
+
+STATS STARTS HERE:
+
+```{r}
+#ANOVA: I was testing this. Didn't work well. Ignore for now
+#library(apex)
+#library(performance)
+#nested_anova <- aov(Uridine ~ species/factor(cell_line), data = control_nhp)
+#check_homogeneity(nested_anova)
+#new_aov2 <- aov(Uridine ~ species + (1/cell_line), data=control_nhp)
+#check_homogeneity(new_aov2)
+#check_sphericity(new_aov2)
+#posthoc <- TukeyHSD(new_aov2)
+#posthoc_species_cell_line <- na.omit(posthoc$`species:cell_line`)
+#ggplot(fortify(me_aug), aes(species, Uridine, color=cell_line)) +
+     #stat_summary(fun.data=mean_se, geom="pointrange") +
+     #stat_summary(aes(y=.fitted), fun.y=mean, geom="line")
+#this doesnt do much but was still kind of interesting to see whats different its just plotting the expected slope basically for each category
+```
+
+```{r}
+#separate out the data by differnet condition
+human_nhp <- nhp_activity_data[nhp_activity_data$species=="Human",]
+chimp_nhp <- nhp_activity_data[nhp_activity_data$species=="Chimp",]
+bonobo_nhp <- nhp_activity_data[nhp_activity_data$species=="Bonobo",]
+rhesus_nhp <- nhp_activity_data[nhp_activity_data$species=="Rhesus",]
+control_nhp <- nhp_activity_data[nhp_activity_data$sample_type=="CTRL",]
+```
+
+SPECIES COMPARISON:
+
+
+```{r}
+library(lmerTest) #this lets me get the p-values
+#generate the comparisons with and without the cell line when i was deciding which model was better
+list <- as.factor(colnames(nhp_activity_data))
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type")))
+human_sample_type_lm <- lapply(formula, lm, data=human_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + (1 | cell_line)")))
+human_sample_type_lmer <- lapply(formula, lmer, data=human_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ species"))) d
+human_species_lm <- lapply(formula, lm, data=control_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ species + (1 | cell_line)")))
+human_species_lmer <- lapply(formula, lmer, data=control_nhp)
+
+```
+
+```{r}
+#Done testing. decided to stick with cell line for now.
+list <- as.factor(colnames(nhp_activity_data))
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + (1 | cell_line)")))
+human_sample_type_lmer <- lapply(formula, lmer, data=human_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type")))
+chimp_sample_type_lm <- lapply(formula, lm, data=chimp_nhp) # NOTE THIS HAS TO CHANGE BECAUSE THERE IS ONE CELL LINE SAME FOR RHESUS
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + (1 | cell_line)")))
+bonobo_sample_type_lmer <- lapply(formula, lmer, data=bonobo_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type")))
+rhesus_sample_type_lmer <- lapply(formula, lm, data=rhesus_nhp)
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ species + (1 | cell_line)")))
+control_species_lmer <- lapply(formula, lmer, data=control_nhp)
+```
+
+Failed to converge are because the species are too similar i think. Make note of which ones these are below:
+
+
+Test the assumptions of the models. Not all of them are a great fit. Especially worried about heterskedasity (spell) so tested for variance below.
+One of them is statistically significant (variance changes). However, left as is to see if its something of interest for uniformity.
+
+
+SPECIES Comparsion:
+```{r}
+#quality control testing for different lms also tested with LRT
+library(lattice)
+name_mol <- colnames(nhp_activity_data[5:26])
+for (i in 1: length(control_species_lmer)){
+  lmer = control_species_lmer
+  plot(resid(lmer[[i]]))
+  title(name_mol[i])
+  print(plot(lmer[[i]]))
+  title(name_mol[i])
+  qqnorm(residuals(lmer[[i]]))
+  print(plot(lmer[[i]],
+     sqrt(abs(resid(.)))~fitted(.)))
+  title(name_mol[i])
+  print(plot(lmer[[i]], rstudent(.) ~ hatvalues(.)))
+  title(name_mol[i])
+}
+
+```
+
+Humans sample_type comparison:
+```{r}
+#quality control testing for different lms also tested with LRT
+library(lattice)
+for (i in 1: length(human_sample_type_lmer)){
+  lmer = human_sample_type_lmer
+  plot(resid(lmer[[i]]))
+  title(name_mol[i])
+  print(plot(lmer[[i]]))
+  title(name_mol[i])
+  qqnorm(residuals(lmer[[i]]))
+  print(plot(lmer[[i]],
+     sqrt(abs(resid(.)))~fitted(.)))
+  title(name_mol[i])
+  print(plot(lmer[[i]], rstudent(.) ~ hatvalues(.)))
+  title(name_mol[i])
+}
+
+```
+
+BONOBO:
+```{r}
+for (i in 1: length(bonobo_sample_type_lmer)){
+  lmer = bonobo_sample_type_lmer
+  plot(resid(lmer[[i]]))
+  title(name_mol[i])
+  print(plot(lmer[[i]]))
+  title(name_mol[i])
+  qqnorm(residuals(lmer[[i]]))
+  print(plot(lmer[[i]],
+     sqrt(abs(resid(.)))~fitted(.)))
+  title(name_mol[i])
+  print(plot(lmer[[i]], rstudent(.) ~ hatvalues(.)))
+  title(name_mol[i])
+}
+```
+
+CHIMP:
+```{r}
+for (i in 1: length(chimp_sample_type_lm)){
+  lmer = chimp_sample_type_lm
+  plot(lmer[[i]])
+}
+```
+
+RHESUS:
+
+```{r}
+for (i in 1: length(rhesus_sample_type_lmer)){
+  lmer = rhesus_sample_type_lmer
+  plot(lmer[[i]])
+}
+```
+```{r}
+#Now comparing the interaction effect with and without with LRT as a proxy
+nhp_lfc <- as.data.frame(NA)
+list <- as.factor(colnames(nhp_activity_data))
+
+full_formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + species + species:sample_type + (1 | cell_line)")))
+reduced_formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + species + (1 | cell_line)")))
+full_interaction <- lapply(full_formula, lmer, data=nhp_activity_data)
+reduced_interaction <- lapply(reduced_formula, lmer, data = nhp_activity_data)
+for (i in (c(1:length(list)-5))){
+  lrt_results <- lrtest(full_interaction[[i]], reduced_interaction[[i]])
+}
+```
+
+```{r}
+#testing if there is a difference in variance in the two conditions and across species accounting for cell type (and not)
+library(car)
+library(lmtest)
+list <- as.factor(colnames(nhp_activity_data))
+dataset_list <- c("human_nhp", "chimp_nhp", "bonobo_nhp", "rhesus_nhp")
+
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type")))
+chimp_var <- lapply(formula, leveneTest, data=chimp_nhp)
+print(chimp_var)
+rhesus_var <- lapply(formula, leveneTest, data=rhesus_nhp)
+print(rhesus_var)
+
+#formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ species")))
+#control_var <- lapply(formula, leveneTest, data=control_nhp)
+
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, "~ sample_type + (1 | cell_line)")))
+var_heteroskedacity <- lapply(formula, lmer, data = human_nhp)
+for (i in 1:length(var_heteroskedacity)){
+  results=leveneTest(residuals(var_heteroskedacity[[i]]) ~ human_nhp$sample_type)
+  print(results)
+}
+
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, "~ sample_type + (1 | cell_line)")))
+var_heteroskedacity <- lapply(formula, lmer, data = bonobo_nhp)
+for (i in 1:length(var_heteroskedacity)){
+  results=leveneTest(residuals(var_heteroskedacity[[i]]) ~ bonobo_nhp$sample_type)
+  print(results)
+}
+
+formula <- lapply(list[5:26], function(x) as.formula(paste0(x, "~ species + (1 | cell_line)")))
+var_heteroskedacity <- lapply(formula, lmer, data = control_nhp)
+for (i in 1:length(var_heteroskedacity)){
+  results = leveneTest(residuals(var_heteroskedacity[[i]]) ~ control_nhp$species)
+  print(results)
+}
+```
+
+```{r}
+#testing out a log transform for UTP in humans, which had significant differences in variance. See if it changes the results of the experiment
+#a lot of the QQ plots look off -- but is it worth it to log transform?
+list <- as.factor(colnames(nhp_activity_data))
+formula <- lapply(list[5:26], function(x) as.formula(paste0("log(",x, ") ~ sample_type + (1 | cell_line)")))
+human_sample_type_lmer <- lapply(formula, lmer, data=human_nhp)
+summary(human_sample_type_lmer[[21]])
+#p = 0.172 for KCL so isn't significant. Old one was 
+formula <- lapply(list[5:26], function(x) as.formula(paste0("log(",x, ") ~ sample_type + (1 | cell_line)")))
+var_heteroskedacity <- lapply(formula, lmer, data = human_nhp)
+results=leveneTest(residuals(var_heteroskedacity[[21]]) ~ human_nhp$sample_type)
+print(results)
+```
+
+```{r}
+#no longer significant!
+#lets look at the different plots!
+
+lmer = human_sample_type_lmer
+plot(resid(lmer[[21]]))
+title(name_mol[21])
+print(plot(lmer[[21]]))
+title(name_mol[21])
+qqnorm(residuals(lmer[[21]]))
+print(plot(lmer[[21]],
+   sqrt(abs(resid(.)))~fitted(.)))
+title(name_mol[21])
+print(plot(lmer[[21]], rstudent(.) ~ hatvalues(.)))
+title(name_mol[21])
+
+
+```
+
+
+A little bit more extra analysis looking at the interaction effect graphically...
+Code is very messy and was run piecemeal. May error.
+
+```{r}
+#Average across all the different cell lines and the different conditions and the different species
+#missing human control?
+nhp_activity_w_averages <- nhp_activity_data
+rownames(nhp_activity_w_averages) <- nhp_activity_w_averages[,"identifier"]
+nhp_store <- nhp_activity_w_averages[,c(1:4)]
+nhp_activity_w_averages <- nhp_activity_w_averages[,c(-1,-2,-3,-4)]
+nhp_activity_w_averages[] <- lapply(nhp_activity_w_averages, as.numeric)
+nhp_activity_w_averages["ADRC_Control_Avg",] <- colMeans(nhp_activity_w_averages[c("ADRC.40", "ADRC.40.1", "ADRC.40.2"),])
+nhp_activity_w_averages["WT126_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT126.KCl.1","WT126.KCl.2"),])
+nhp_activity_w_averages["WT33_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT33.1","WT33.2"),])
+nhp_activity_w_averages["WT33_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT33.KCl.1","WT33.KCl.2"),])
+nhp_activity_w_averages["WT126_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT126.1","WT126.2" ),])
+nhp_activity_w_averages["ADRC_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("ADRC.40.KCl.2", "ADRC.40.KCl.3"),])
+nhp_activity_w_averages["Human_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT33.1","WT33.2","WT126.1","WT126.2","ADRC.40", "ADRC.40.1", "ADRC.40.2"),])
+nhp_activity_w_averages["Human_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("WT33.KCl.1","WT33.KCl.2","WT126.KCl.1","WT126.KCl.2","ADRC.40.KCl.2", "ADRC.40.KCl.3"),])
+nhp_activity_w_averages["Bono53_Control_Avg",] <- 
+colMeans(nhp_activity_w_averages[c("Bono.53.1","Bono.53.2", "Bono33.3"),])
+nhp_activity_w_averages["Bono53_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("Bono.53.KCl.1","Bono.53.KCl.2","Bono.53.KCl.3"),])
+nhp_activity_w_averages["Bono86_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("Bono.86.1" ,"Bono.86.2"),])
+nhp_activity_w_averages["Bono86_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("Bono.86.KCl.1","Bono.86.KCl.2","Bono.86.KCl.3"),])
+nhp_activity_w_averages["Chimp_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("Chimp.1","Chimp.2","Chimp.3"),])
+nhp_activity_w_averages["Chimp_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("Chimp.KCl.1","Chimp.KCl.2","Chimp.KCl.3"),])
+nhp_activity_w_averages["Rhesus_Control_Avg",] <-  colMeans(nhp_activity_w_averages[c("Rhesus.iPS.iN","Rhesus.iPS.iN.1","Rhesus.iPS.iN.2"),])
+nhp_activity_w_averages["Rhesus_KCl_Avg",] <-  colMeans(nhp_activity_w_averages[c("Rhesus.iPS.iN.KCl.1","Rhesus.iPS.iN.KCl.2","Rhesus.iPS.iN.KCl.3"),])
+
+```
+
+```{r}
+#get meta data about the differnet samples and put it into nhp_activity_only_averages
+nhp_activity_only_averages <- nhp_activity_w_averages[c(-c(1:36)),]
+tmp <- strsplit(rownames(nhp_activity_only_averages), split= "_")
+tmp2 <- do.call(rbind, tmp)
+nhp_activity_only_averages$species <- tmp2[,1]
+nhp_activity_only_averages$condition <- tmp2[,2]
+```
+
+
+```{r}
+#calculate the FC difference between KCL and Control for each species
+nhp_deltas <- as.data.frame(NA)
+nhp_deltas["WT126_Delta",] <- NA
+nhp_deltas["WT33_Delta",] <- NA
+nhp_deltas["ADRC40_Delta",] <- NA
+nhp_deltas["Bono53_Delta",] <- NA
+nhp_deltas["Bono86_Delta",] <- NA
+nhp_deltas["Chimp_Delta",] <- NA
+nhp_deltas["Rhesus_Delta",] <- NA
+nhp_deltas["Human_Delta",] <- NA
+nhp_deltas["Bonobo_Delta",] <- NA
+nhp_deltas["Human_Delta",c(1:22)] <- nhp_activity_only_averages["Human_KCl_Avg",c(1:22)]/nhp_activity_only_averages["Human_Control_Avg",c(1:22)]
+colnames(nhp_activity_only_averages)[1] <- "Adenosine"
+nhp_deltas["Human_Delta",c(23:24)] <- c("Human", "Delta")
+nhp_deltas["Rhesus_Delta",c(1:22)] <- nhp_activity_only_averages["Rhesus_KCl_Avg",c(1:22)]/nhp_activity_only_averages["Rhesus_Control_Avg",c(1:22)]
+nhp_deltas["Rhesus_Delta",c(23:24)] <- c("Rhesus", "Delta")
+nhp_deltas["Chimp_Delta",c(1:22)] <- nhp_activity_only_averages["Chimp_KCl_Avg",c(1:22)]/nhp_activity_only_averages["Chimp_Control_Avg",c(1:22)]
+nhp_deltas["Chimp_Delta",c(23:24)] <- c("Chimp", "Delta")
+nhp_deltas["Bonobo_Delta",c(1:22)] <- nhp_activity_only_averages["Bono_KCl_Avg",c(1:22)]/nhp_activity_only_averages["Bono_Control_Avg",c(1:22)]
+nhp_deltas["Bonobo_Delta",c(23:24)] <- c("Bonobo", "Delta")
+nhp_deltas <- nhp_deltas[-1,]
+nhp_deltas$species <- c("Chimp", "Rhesus", "Human", "Bonobo")
+nhp_deltas$species <- factor(nhp_deltas$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+```
+
+
+```{r}
+#now calcualte it for the cell lines!
+nhp_FC <- as.data.frame(NA)
+nhp_activity_w_averages[] <- lapply(nhp_activity_w_averages, as.numeric)
+nhp_FC["WT126",] <- NA
+nhp_FC["WT33",] <- NA
+nhp_FC["ADRC40",] <- NA
+nhp_FC["Bonobo_53",] <- NA
+nhp_FC["Bonobo_86",] <- NA
+nhp_FC["Chimp",] <- NA
+nhp_FC["Rhesus",] <- NA
+nhp_FC ["WT126",c(1:22)] <- nhp_activity_w_averages["WT126_KCl_Avg",c(1:22)]/nhp_activity_w_averages["WT126_Control_Avg",c(1:22)]
+
+nhp_FC ["WT33",c(1:22)] <- nhp_activity_w_averages["WT33_KCl_Avg",c(1:22)]/nhp_activity_w_averages["WT33_Control_Avg",c(1:22)]
+
+nhp_FC ["Bonobo_53",c(1:22)] <- nhp_activity_w_averages["Bono53_KCl_Avg",c(1:22)]/nhp_activity_w_averages["Bono53_Control_Avg",c(1:22)]
+
+nhp_FC ["Bonobo_86",c(1:22)] <- nhp_activity_w_averages["Bono86_KCl_Avg",c(1:22)]/nhp_activity_w_averages["Bono86_Control_Avg",c(1:22)]
+
+nhp_FC ["Chimp",c(1:22)] <- nhp_activity_w_averages["Chimp_KCl_Avg",c(1:22)]/nhp_activity_w_averages["Chimp_Control_Avg",c(1:22)]
+
+nhp_FC ["Rhesus",c(1:22)] <- nhp_activity_w_averages["Rhesus_KCl_Avg",c(1:22)]/nhp_activity_w_averages["Rhesus_Control_Avg",c(1:22)]
+
+nhp_FC ["ADRC40",c(1:22)] <- nhp_activity_w_averages["ADRC_KCl_Avg",c(1:22)]/nhp_activity_w_averages["ADRC_Control_Avg",c(1:22)]
+nhp_FC <- nhp_FC[-1,-1]
+nhp_FC$species <- c("Human", "Human", "Human", "Bonobo", "Bonobo", "Chimp", "Rhesus")
+nhp_FC$species <- factor(nhp_FC$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+```
+
+```{r}
+#plot FC across species but may error
+for (i in c(1:22)){  
+    colnames(nhp_FC)[1] = "Adenosine"
+    nucleotide=colnames(nhp_FC[i])
+    print(ggplot(nhp_FC, aes(x=species, y=nhp_only_averages[,i])) +geom_point() + ggtitle(paste0("Control/KCl Means Across Species: ", nucleotide)) +ylab(paste0("Fold Change in ", nucleotide, " Amount Across Species")))
+}
+```
+
+```{r}
+#plot fold change across species/cell_line
+for (i in c(1:22)){  
+    nucleotide=colnames(nhp_FC[i])
+    print(ggplot(nhp_FC, aes(x=species,y=nhp_FC[,i])) + geom_point() + ggtitle(paste0("KCl:Control Fold Change Across Species: ", nucleotide))+ylab(paste0("Fold Change in ", nucleotide)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    theme(plot.title=element_text(hjust=0.5))+
+    stat_summary(fun = mean, position=position_dodge(0.75),geom = "point", size=2, color = "blue", show.legend=FALSE))
+}
+```
+
+Extra Analysis After meeting with Jeff:
+1. xanthosine: do a paired t-test
+2. all monophosphates on a graph
+3. all A*s (ATP, AMP, dATP etc) on a graph
+4. Human vs Nonhuman change in species/kcl for CMP
+
+```{r}
+#Check if xanthosine is significantly different with KCl vs Not in Humans w/ a t-test
+#averaged across samples to do pairing (so have one average for each technical replicate):
+list_control <- c(nhp_activity_only_averages["ADRC_Control_Avg", "Xanthosine"], nhp_activity_only_averages["WT33_Control_Avg", "Xanthosine"], nhp_activity_only_averages["WT126_Control_Avg", "Xanthosine"])
+list_kcl <- c(nhp_activity_only_averages["ADRC_KCl_Avg", "Xanthosine"], nhp_activity_only_averages["WT33_KCl_Avg", "Xanthosine"], nhp_activity_only_averages["WT126_KCl_Avg", "Xanthosine"])
+#nested anova
+anova <- aov(human_nhp$Xanthosine ~ human_nhp$sample_type)
+summary(anova) #unbalanced
+#Shapiro-Wilks Test:
+shapiro.test(list_control)
+shapiro.test(list_kcl)
+#should i be doing them separately? regardless, appear normal. no log correction
+#Paired t-test:
+print(t.test(list_control, list_kcl, paired = TRUE, alternative = "two.sided"))
+```
+
+```{r}
+list_monops <- c("CMP", "AMP", "GMP_75", "TMP_75", "UMP_75")
+nhp_monops <- nhp_activity_data[,c("identifier", list_monops)]
+melted_nhp_monops <- melt(nhp_monops, id = "identifier")
+colnames(melted_nhp_monops) <- c("identifier", "monop", "counts")
+melted_nhp_monops <- merge(melted_nhp_monops, meta)
+melted_nhp_monops_norm <- melted_nhp_monops
+melted_nhp_monops_norm <- (melted_nhp_monops_norm %>% group_by(monop) %>% mutate(Norm_Count = counts/mean(counts))) 
+melted_nhp_monops$species <- factor(melted_nhp_monops$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+melted_nhp_monops_norm$species <- factor(melted_nhp_monops$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+title <- "Monophosphate Mass Spec Values Across Species"
+  print(ggplot(melted_nhp_monops, aes(x = species, y = counts, group = monop, color = monop)) + 
+      geom_point() + stat_summary(fun=mean, geom="line") + ylab("Mass Spec Values (Normalized to Total Protein)") + stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.3, alpha = 0.4) +
+      ggtitle(title)) + facet_wrap(~sample_type)
+title <- "Monophosphate Mass Spec Values Across Species (Normalized)"
+   print(ggplot(melted_nhp_monops_norm, aes(x = species, y = Norm_Count, group = monop, color = monop)) + 
+      geom_point() + stat_summary(fun=mean, geom="line") + ylab("Values Normalized to Monophosphate-Specific Mean") + stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.3, alpha = 0.4) +
+      ggtitle(title)) + facet_wrap(~sample_type)
+```
+
+```{r}
+list_monops <- c("AMP", "ATP", "ADP", "Adenosine")
+nhp_monops <- nhp_activity_data[,c("identifier", list_monops)]
+melted_nhp_monops <- melt(nhp_monops, id = "identifier")
+colnames(melted_nhp_monops) <- c("identifier", "monop", "counts")
+melted_nhp_monops <- merge(melted_nhp_monops, meta)
+melted_nhp_monops_norm <- melted_nhp_monops
+melted_nhp_monops_norm <- (melted_nhp_monops_norm %>% group_by(monop) %>% mutate(Norm_Count = counts/mean(counts))) 
+melted_nhp_monops$species <- factor(melted_nhp_monops$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+melted_nhp_monops_norm$species <- factor(melted_nhp_monops$species, levels=c("Human", "Chimp", "Bonobo", "Rhesus"))
+title <- "Mass Spec Values Across Species"
+  print(ggplot(melted_nhp_monops, aes(x = species, y = counts, group = monop, color = monop)) + 
+      geom_point() + stat_summary(fun=mean, geom="line") + ylab("Mass Spec Values (Normalized to Total Protein)") + stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.3, alpha = 0.4) +
+      ggtitle(title)) + facet_wrap(~sample_type)
+title <- "Mass Spec Values Across Species (Normalized)"
+   print(ggplot(melted_nhp_monops_norm, aes(x = species, y = Norm_Count, group = monop, color = monop)) + 
+      geom_point() + stat_summary(fun=mean, geom="line") + ylab("Values Normalized to Molecule-Specific Mean") + stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.3, alpha = 0.4) +
+      ggtitle(title)) + facet_wrap(~sample_type)
+```
+
+```{r}
+list <- as.factor(colnames(nhp_activity_data))
+human_not_data <- nhp_activity_data
+levels(human_not_data$species) <- c(levels(human_not_data$species), "NHP") 
+human_not_data$species[human_not_data$species=="Bonobo"] = factor("NHP")
+human_not_data$species[human_not_data$species=="Chimp"] = factor("NHP")
+human_not_data$species[human_not_data$species=="Rhesus"] = factor("NHP")
+human_not_data_control <- human_not_data[human_not_data$sample_type == "CTRL",]
+
+#check if the interaction effect is significant with two species
+full_formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + species + species:sample_type + (1 | cell_line)")))
+reduced_formula <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ sample_type + species + (1 | cell_line")))
+full_interaction <- lapply(full_formula, lmer, data=human_not_data)
+reduced_interaction <- lapply(reduced_formula, lm, data = human_not_data)
+#CMP only to see if interaction is better:
+lrt_results <- lrtest(full_interaction[[7]], reduced_interaction[[7]])
+summary(full_interaction[[7]])
+#it is not better
+
+#check if there is a significant species effect for CMP with just two species categories
+species_effect <- lapply(list[5:26], function(x) as.formula(paste0(x, " ~ species + (1 | cell_line)")))
+species_res <- lapply(species_effect, lmer, data=human_not_data_control)
+summary(species_res[[7]])
+#there is not
+```
